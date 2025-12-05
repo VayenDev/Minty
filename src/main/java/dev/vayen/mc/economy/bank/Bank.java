@@ -34,7 +34,7 @@ public class Bank {
     List<BankCustomer> customers;
     @BsonIgnore
     List<BankLoan> loans;
-    double maxDebt;
+    long maxDebt;
 
     public void addCustomer(BankCustomer customer) {
         customers.add(customer);

@@ -29,10 +29,13 @@ import lombok.Getter;
 import org.bson.codecs.configuration.CodecRegistries;
 import org.bson.codecs.configuration.CodecRegistry;
 import org.bson.codecs.pojo.PojoCodecProvider;
+import org.bukkit.Bukkit;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.IOException;
 import java.nio.file.Files;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public final class Minty extends JavaPlugin {
@@ -54,11 +57,15 @@ public final class Minty extends JavaPlugin {
         if (getDataFolder().exists()) getDataFolder().mkdirs();
 
         characterManager = new CharacterManager(Caffeine.newBuilder().maximumSize(getServer().getMaxPlayers()).build());
-        bankManager = new BankManager(Caffeine.newBuilder().maximumSize(10).build()); // 10 Banks loaded on the server with all customers and loans.
+        bankManager = new BankManager(
+                Caffeine.newBuilder().maximumSize(10).build(), // 10 Banks loaded on the server with all customers and loans.
+                Caffeine.newBuilder().maximumSize(getServer().getMaxPlayers() * 10L).build()
+        );
 
         if (!Files.exists(getDataPath().resolve(CharacterConfig.PATH)))
-            YamlConfigurations.save(CharacterConfig.PATH, CharacterConfig.class, characterConfig);
-        else characterConfig = YamlConfigurations.load(CharacterConfig.PATH, CharacterConfig.class);
+            YamlConfigurations.save(getDataPath().resolve(CharacterConfig.PATH), CharacterConfig.class, characterConfig);
+        else
+            characterConfig = YamlConfigurations.load(getDataPath().resolve(CharacterConfig.PATH), CharacterConfig.class);
 
         LOGGER.info("Minty is loading!");
     }
@@ -67,6 +74,16 @@ public final class Minty extends JavaPlugin {
     public void onEnable() {
         PLUGIN_MANAGER.registerEvents(new MenuListener(), this);
         LOGGER.info("Minty is enabled!");
+
+        Bukkit.getAsyncScheduler().runAtFixedRate(this, scheduledTask -> {
+            for (var bank : bankManager.getCache().asMap().values()) {
+                try {
+                    bankManager.save(bank);
+                } catch (IOException e) {
+                    LOGGER.warning("Failed to save bank " + bank.getName() + " (" + bank.getUuid() + ")!");
+                }
+            }
+        }, 0, 5, TimeUnit.MINUTES);
     }
 
     @Override

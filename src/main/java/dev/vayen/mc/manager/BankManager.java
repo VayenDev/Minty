@@ -21,6 +21,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import dev.vayen.mc.Minty;
 import dev.vayen.mc.economy.bank.Bank;
 import dev.vayen.mc.economy.bank.BankCustomer;
+import dev.vayen.mc.economy.bank.BankLoan;
 import org.bson.BsonBinaryReader;
 import org.bson.ByteBufNIO;
 import org.bson.codecs.Codec;
@@ -37,6 +38,7 @@ import java.util.regex.Pattern;
 public class BankManager extends DataManager<Bank, UUID, BankManager.Params> {
     private static final Codec<Bank> bankCodec = Minty.POJO_CODEC_REGISTRY.get(Bank.class);
     private static final Codec<BankCustomer> customerCodec = Minty.POJO_CODEC_REGISTRY.get(BankCustomer.class);
+    private static final Codec<BankLoan> loanCodec = Minty.POJO_CODEC_REGISTRY.get(BankLoan.class);
 
     private static final Pattern UUID_END_WITH_BSON = Pattern.compile("\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}.bson\\b");
 
@@ -59,6 +61,14 @@ public class BankManager extends DataManager<Bank, UUID, BankManager.Params> {
         return Minty.INSTANCE.getDataPath().resolve("banks").resolve(String.format("%s/customers/%s.bson", bankUUID.toString(), customerUUID.toString()));
     }
 
+    private Path getLoanFolderPath(UUID bankUUID) {
+        return Minty.INSTANCE.getDataPath().resolve("banks").resolve(String.format("%s/loans/", bankUUID.toString()));
+    }
+
+    private Path generateLoanPath(UUID bankUUID, UUID loanUUID) {
+        return Minty.INSTANCE.getDataPath().resolve("banks").resolve(String.format("%s/loans/%s.bson", bankUUID.toString(), loanUUID.toString()));
+    }
+
     @Override
     public Optional<Bank> load(Params params) {
         var filePath = generatePath(params.bankUUID);
@@ -77,41 +87,41 @@ public class BankManager extends DataManager<Bank, UUID, BankManager.Params> {
         if (loaded != null) {
             cache.put(params.bankUUID, loaded);
 
-            final List<BankCustomer> customers = new ArrayList<>();
             try {
-                try (var files = Files.list(getCustomerFolderPath(params.bankUUID))) {
-                    files.filter(path -> UUID_END_WITH_BSON.matcher(path.getFileName().toString()).matches()).forEach(path -> {
-                        byte[] fileData;
-                        try {
-                            fileData = Files.readAllBytes(path);
-                        } catch (IOException e) {
-                            Minty.INSTANCE.LOGGER.fine(String.format("Failed to read customer file %s for Bank %s (%s)", path.getFileName(), loaded.getName(), loaded.getUuid()));
-                            return;
-                        }
-
-                        try (var reader = new BsonBinaryReader(new ByteBufferBsonInput(new ByteBufNIO(ByteBuffer.wrap(fileData))))) {
-                            var customer = customerCodec.decode(reader, null);
-                            customers.add(customer);
-                        }
-                    });
-                }
+                loaded.setCustomers(loadList(getCustomerFolderPath(params.bankUUID), customerCodec, loaded));
+                loaded.getCustomers().forEach(customer -> ibanToCustomerCache.put(customer.getIban(), customer));
             } catch (IOException ignored) {
-                Minty.INSTANCE.LOGGER.fine(String.format("Failed to load customers for Bank %s (%s)", loaded.getName(), loaded.getUuid()));
+                Minty.INSTANCE.LOGGER.warning(String.format("Failed to load customers for Bank %s (%s)", loaded.getName(), loaded.getUuid()));
             }
-            loaded.setCustomers(customers);
+
+            try {
+                loaded.setLoans(loadList(getLoanFolderPath(params.bankUUID), loanCodec, loaded));
+            } catch (IOException e) {
+                Minty.INSTANCE.LOGGER.warning(String.format("Failed to load loans for Bank %s (%s)", loaded.getName(), loaded.getUuid()));
+            }
         }
         return Optional.ofNullable(loaded);
     }
 
-    @Override
-    public Optional<Bank> getCached(UUID identifier) {
-        return Optional.ofNullable(cache.getIfPresent(identifier));
-    }
+    private <T> List<T> loadList(Path folderPath, Codec<T> codec, Bank bank) throws IOException {
+        final List<T> list = new ArrayList<>();
+        try (var files = Files.list(folderPath)) {
+            files.filter(path -> UUID_END_WITH_BSON.matcher(path.getFileName().toString()).matches()).forEach(path -> {
+                byte[] fileData;
+                try {
+                    fileData = Files.readAllBytes(path);
+                } catch (IOException e) {
+                    Minty.INSTANCE.LOGGER.warning(String.format("Failed to read data file %s for Bank %s (%s)", path.toAbsolutePath(), bank.getName(), bank.getUuid()));
+                    return;
+                }
 
-    @Override
-    public Optional<Bank> get(UUID identifier) {
-        var cached = getCached(identifier);
-        return cached.isPresent() ? cached : load(new Params(identifier));
+                try (var reader = new BsonBinaryReader(new ByteBufferBsonInput(new ByteBufNIO(ByteBuffer.wrap(fileData))))) {
+                    var data = codec.decode(reader, null);
+                    list.add(data);
+                }
+            });
+        }
+        return list;
     }
 
     public void save(Bank bank) throws IOException {
@@ -121,14 +131,21 @@ public class BankManager extends DataManager<Bank, UUID, BankManager.Params> {
         for (var customer : bank.getCustomers()) {
             super.save(generateCustomerPath(bankUUID, customer.getPlayerUUID()), customerCodec, customer);
         }
+        for (var loan : bank.getLoans()) {
+            super.save(generateLoanPath(bankUUID, loan.getUuid()), loanCodec, loan);
+        }
     }
 
     public void delete(Params params) throws IOException {
         super.delete(generatePath(params.bankUUID), params.bankUUID);
+        Files.deleteIfExists(getCustomerFolderPath(params.bankUUID));
+        Files.deleteIfExists(getLoanFolderPath(params.bankUUID));
     }
 
     public void unload(Params params) throws IOException {
         super.unload(generatePath(params.bankUUID), bankCodec, params.bankUUID);
+        cache.invalidate(params.bankUUID);
+        ibanToCustomerCache.asMap().entrySet().removeIf(entry -> entry.getValue().getBankUUID().equals(params.bankUUID));
     }
 
     private String generateIban(UUID bankUUID, UUID playerUUID) {
@@ -168,6 +185,10 @@ public class BankManager extends DataManager<Bank, UUID, BankManager.Params> {
         );
     }
 
-    public record Params(UUID bankUUID) implements DataManager.Params {
+    public record Params(UUID bankUUID) implements DataManager.Params<UUID> {
+        @Override
+        public UUID getIdentifier() {
+            return bankUUID;
+        }
     }
 }

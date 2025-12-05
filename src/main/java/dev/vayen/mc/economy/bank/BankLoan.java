@@ -28,8 +28,8 @@ public class BankLoan {
     private final UUID uuid;
     private final UUID bank;
     private final UUID customerUUID;
-    private double amount;
-    private double amountPaid;
-    private double interestRate;
+    private long amount;
+    private long amountPaid;
+    private float interestRate;
     private int durationInDays;
 }

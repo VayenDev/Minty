@@ -32,14 +32,19 @@ import java.util.Map;
 import java.util.Optional;
 
 @Data
-public abstract class DataManager<T, ID, P extends DataManager.Params> {
+public abstract class DataManager<T, ID, P extends DataManager.Params<ID>> {
     protected Cache<@NotNull ID, T> cache;
 
     abstract public Optional<T> load(P params) throws IOException;
 
-    public abstract Optional<T> getCached(ID identifier);
+    public Optional<T> getCached(ID identifier) {
+        return Optional.ofNullable(cache.getIfPresent(identifier));
+    }
 
-    public abstract Optional<T> get(ID identifier);
+    protected Optional<T> get(P params) throws IOException {
+        var cached = getCached(params.getIdentifier());
+        return cached.isPresent() ? cached : load(params);
+    }
 
     protected <D> void save(Path filePath, Codec<D> codec, D data) throws IOException {
         Files.createDirectories(filePath.getParent());
@@ -68,6 +73,7 @@ public abstract class DataManager<T, ID, P extends DataManager.Params> {
 
     abstract public Map<String, Object> variables(T data);
 
-    protected interface Params {
+    protected interface Params<ID> {
+        ID getIdentifier();
     }
 }

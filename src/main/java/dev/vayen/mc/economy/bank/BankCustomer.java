@@ -28,5 +28,5 @@ public class BankCustomer {
     private final UUID playerUUID;
     private final UUID bankUUID;
     private final String iban;
-    private double balance;
+    private long balance;
 }

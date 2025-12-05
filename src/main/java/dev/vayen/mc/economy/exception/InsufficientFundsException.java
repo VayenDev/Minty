@@ -18,7 +18,7 @@
 package dev.vayen.mc.economy.exception;
 
 public class InsufficientFundsException extends Exception {
-    public InsufficientFundsException(double maxDebt) {
-        super(String.format("%f", maxDebt));
+    public InsufficientFundsException(long maxDebt) {
+        super(String.format("%d", maxDebt));
     }
 }
