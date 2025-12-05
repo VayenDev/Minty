@@ -1,0 +1,7 @@
+name: Minty
+version: '1.0.0'
+main: dev.vayen.mc.Minty
+api-version: '1.21'
+authors: [ mtctx ]
+description: Minty, the complete system behind VayenMC
+website: https://mc.vayen.dev/
