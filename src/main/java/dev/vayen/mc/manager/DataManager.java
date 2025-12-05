@@ -37,6 +37,10 @@ public abstract class DataManager<T, ID, P extends DataManager.Params> {
 
     abstract public Optional<T> load(P params) throws IOException;
 
+    public abstract Optional<T> getCached(ID identifier);
+
+    public abstract Optional<T> get(ID identifier);
+
     protected <D> void save(Path filePath, Codec<D> codec, D data) throws IOException {
         Files.createDirectories(filePath.getParent());
         if (!Files.exists(filePath)) Files.createFile(filePath);

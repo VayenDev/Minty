@@ -1,5 +1,5 @@
 /*
- * Minty (Minty.main): BankLoan.java
+ * Minty (Minty.main): InsufficientFundsException.java
  * Copyright (C) 2025 mtctx
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,21 +15,10 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-package dev.vayen.mc.economy.bank;
+package dev.vayen.mc.economy.exception;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
-import java.util.UUID;
-
-@Data
-@AllArgsConstructor
-public class BankLoan {
-    private final UUID uuid;
-    private final UUID bank;
-    private final UUID customerUUID;
-    private double amount;
-    private double amountPaid;
-    private double interestRate;
-    private int durationInDays;
+public class InsufficientFundsException extends Exception {
+    public InsufficientFundsException(double maxDebt) {
+        super(String.format("%f", maxDebt));
+    }
 }

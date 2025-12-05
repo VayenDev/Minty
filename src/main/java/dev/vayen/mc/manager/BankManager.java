@@ -40,8 +40,11 @@ public class BankManager extends DataManager<Bank, UUID, BankManager.Params> {
 
     private static final Pattern UUID_END_WITH_BSON = Pattern.compile("\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}.bson\\b");
 
-    public BankManager(Cache<@NotNull UUID, Bank> cache) {
+    private final Cache<@NotNull String, BankCustomer> ibanToCustomerCache;
+
+    public BankManager(Cache<@NotNull UUID, Bank> cache, Cache<@NotNull String, BankCustomer> ibanToCustomerCache) {
         this.cache = cache;
+        this.ibanToCustomerCache = ibanToCustomerCache;
     }
 
     private Path generatePath(UUID uuid) {
@@ -100,12 +103,23 @@ public class BankManager extends DataManager<Bank, UUID, BankManager.Params> {
         return Optional.ofNullable(loaded);
     }
 
+    @Override
+    public Optional<Bank> getCached(UUID identifier) {
+        return Optional.ofNullable(cache.getIfPresent(identifier));
+    }
+
+    @Override
+    public Optional<Bank> get(UUID identifier) {
+        var cached = getCached(identifier);
+        return cached.isPresent() ? cached : load(new Params(identifier));
+    }
+
     public void save(Bank bank) throws IOException {
         var bankUUID = bank.getUuid();
         super.save(generatePath(bankUUID), bankCodec, bank);
 
         for (var customer : bank.getCustomers()) {
-            super.save(generateCustomerPath(bankUUID, customer.getUuid()), customerCodec, customer);
+            super.save(generateCustomerPath(bankUUID, customer.getPlayerUUID()), customerCodec, customer);
         }
     }
 
@@ -117,14 +131,41 @@ public class BankManager extends DataManager<Bank, UUID, BankManager.Params> {
         super.unload(generatePath(params.bankUUID), bankCodec, params.bankUUID);
     }
 
+    private String generateIban(UUID bankUUID, UUID playerUUID) {
+        long playerNum = Math.abs(playerUUID.getMostSignificantBits() % 1_000_00000);
+        long bankNum = Math.abs(bankUUID.getMostSignificantBits() % 1_000_00000);
+        return String.format("MC%08d%08d", bankNum, playerNum);
+    }
+
+    public void createCustomer(Bank bank, UUID playerUUID) {
+        var iban = generateIban(bank.getUuid(), playerUUID);
+        var customer = new BankCustomer(playerUUID, bank.getUuid(), iban, 0);
+        bank.addCustomer(customer);
+        ibanToCustomerCache.put(iban, customer);
+    }
+
+    public void deleteCustomer(Bank bank, UUID playerUUID) {
+        bank.removeCustomer(playerUUID);
+        ibanToCustomerCache.invalidate(generateIban(bank.getUuid(), playerUUID));
+    }
+
+    public void updateCustomer(Bank bank, BankCustomer newCustomer) {
+        bank.removeCustomer(newCustomer.getPlayerUUID());
+        bank.addCustomer(newCustomer);
+    }
+
+    public Optional<BankCustomer> getCustomerByIban(String iban) {
+        return Optional.ofNullable(ibanToCustomerCache.getIfPresent(iban));
+    }
+
     @Override
     public Map<String, Object> variables(Bank bank) {
-        var map = new HashMap<String, Object>();
-        map.put("bank.uuid", bank.getUuid());
-        map.put("bank.name", bank.getName());
-        map.put("bank.customers.size", bank.getCustomers().size());
-        map.put("bank.loans.size", bank.getLoans().size());
-        return map;
+        return Map.of(
+                "bank.uuid", bank.getUuid(),
+                "bank.name", bank.getName(),
+                "bank.customers.size", bank.getCustomers().size(),
+                "bank.loans.size", bank.getLoans().size()
+        );
     }
 
     public record Params(UUID bankUUID) implements DataManager.Params {

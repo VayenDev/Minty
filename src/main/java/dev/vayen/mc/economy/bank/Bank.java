@@ -22,6 +22,7 @@ import lombok.Data;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @AllArgsConstructor
@@ -33,4 +34,33 @@ public class Bank {
     List<BankCustomer> customers;
     @BsonIgnore
     List<BankLoan> loans;
+    double maxDebt;
+
+    public void addCustomer(BankCustomer customer) {
+        customers.add(customer);
+    }
+
+    public void removeCustomer(UUID uuid) {
+        customers.removeIf(c -> c.getPlayerUUID().equals(uuid));
+    }
+
+    public Optional<BankCustomer> getCustomer(UUID uuid) {
+        return customers.stream().filter(c -> c.getPlayerUUID().equals(uuid)).distinct().findFirst();
+    }
+
+    public void addLoan(BankLoan loan) {
+        loans.add(loan);
+    }
+
+    public void removeLoan(UUID uuid) {
+        loans.removeIf(c -> c.getUuid().equals(uuid));
+    }
+
+    public Optional<BankLoan> getLoan(UUID uuid) {
+        return loans.stream().filter(c -> c.getUuid().equals(uuid)).distinct().findFirst();
+    }
+
+    public Optional<BankLoan> getLoanByCustomer(UUID customerUUID) {
+        return loans.stream().filter(c -> c.getCustomerUUID().equals(uuid)).distinct().findFirst();
+    }
 }

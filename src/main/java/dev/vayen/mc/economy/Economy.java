@@ -17,7 +17,48 @@
 
 package dev.vayen.mc.economy;
 
+import dev.vayen.mc.Minty;
+import dev.vayen.mc.economy.exception.InsufficientFundsException;
+import dev.vayen.mc.economy.exception.InvalidPaymentAmountException;
+import dev.vayen.mc.economy.exception.TooRichException;
+
+import java.util.NoSuchElementException;
+
 public class Economy {
+    public void pay(String senderIban, String receiverIban, double amount) throws InvalidPaymentAmountException, NoSuchElementException, InsufficientFundsException, TooRichException {
+        var bm = Minty.INSTANCE.getBankManager();
+        var sender = bm.getCustomerByIban(senderIban).orElseThrow();
+        var receiver = bm.getCustomerByIban(receiverIban).orElseThrow();
+        var maxDebt = bm.getCached(sender.getBankUUID()).orElseThrow().getMaxDebt();
 
+        if (amount <= 0) throw new InvalidPaymentAmountException();
+        if (sender.getBalance() - amount < (-maxDebt))
+            throw new InsufficientFundsException(maxDebt);
+        var newReceiverBalance = receiver.getBalance() + amount;
+        if (newReceiverBalance >= Double.MAX_VALUE) throw new TooRichException(newReceiverBalance - Double.MAX_VALUE);
 
+        sender.setBalance(sender.getBalance() - amount);
+        receiver.setBalance(newReceiverBalance);
+    }
+
+    public void deposit(String iban, double amount) throws NoSuchElementException, TooRichException {
+        var bm = Minty.INSTANCE.getBankManager();
+        var customer = bm.getCustomerByIban(iban).orElseThrow();
+
+        var newBalance = customer.getBalance() + amount;
+        if (newBalance >= Double.MAX_VALUE) throw new TooRichException(newBalance - Double.MAX_VALUE);
+
+        customer.setBalance(customer.getBalance() + amount);
+    }
+
+    public void withdraw(String iban, double amount) throws NoSuchElementException, InsufficientFundsException {
+        var bm = Minty.INSTANCE.getBankManager();
+        var customer = bm.getCustomerByIban(iban).orElseThrow();
+        var maxDebt = bm.getCached(customer.getBankUUID()).orElseThrow().getMaxDebt();
+
+        if (customer.getBalance() - amount < (-maxDebt))
+            throw new InsufficientFundsException(maxDebt);
+
+        customer.setBalance(customer.getBalance() - amount);
+    }
 }

@@ -20,14 +20,13 @@ package dev.vayen.mc.economy.bank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import java.util.List;
 import java.util.UUID;
 
 @Data
 @AllArgsConstructor
 public class BankCustomer {
-    private final UUID uuid;
+    private final UUID playerUUID;
     private final UUID bankUUID;
-    private final List<UUID> loans;
+    private final String iban;
     private double balance;
 }

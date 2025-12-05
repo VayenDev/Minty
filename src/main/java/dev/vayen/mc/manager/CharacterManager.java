@@ -65,6 +65,17 @@ public class CharacterManager extends DataManager<Character, UUID, CharacterMana
         return Optional.ofNullable(loaded);
     }
 
+    @Override
+    public Optional<Character> getCached(UUID identifier) {
+        return Optional.ofNullable(cache.getIfPresent(identifier));
+    }
+
+    @Override
+    public Optional<Character> get(UUID identifier) {
+        var cached = getCached(identifier);
+        return cached.isPresent() ? cached : load(new Params(identifier, 0));
+    }
+
     public void save(Character character) throws IOException {
         super.save(generatePath(character.getOwner(), character.getId()), codec, character);
     }
