@@ -1,5 +1,5 @@
 /*
- * Minty (Minty.main): BankCustomer.java
+ * Minty (Minty.main): CustomerNotFoundException.java
  * Copyright (C) 2025 mtctx
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,18 +15,10 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-package dev.vayen.mc.economy.bank;
+package dev.vayen.mc.economy.exception;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
-import java.util.UUID;
-
-@AllArgsConstructor
-@Data
-public class BankCustomer {
-    private final UUID playerUUID;
-    private final UUID bankUUID;
-    private final String iban;
-    private long balance;
+public class CustomerNotFoundException extends Exception {
+    public CustomerNotFoundException(boolean isReceiver) {
+        super(isReceiver ? "Receiver not found" : "Sender not found");
+    }
 }

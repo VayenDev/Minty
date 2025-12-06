@@ -28,6 +28,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -35,15 +36,17 @@ import java.util.Optional;
 public abstract class DataManager<T, ID, P extends DataManager.Params<ID>> {
     protected Cache<@NotNull ID, T> cache;
 
-    abstract public Optional<T> load(P params) throws IOException;
+    abstract public List<T> loadAllFromFile() throws IOException;
+
+    abstract public Optional<T> loadFromFile(P params) throws IOException;
 
     public Optional<T> getCached(ID identifier) {
         return Optional.ofNullable(cache.getIfPresent(identifier));
     }
 
-    protected Optional<T> get(P params) throws IOException {
+    public Optional<T> get(P params) throws IOException {
         var cached = getCached(params.getIdentifier());
-        return cached.isPresent() ? cached : load(params);
+        return cached.isPresent() ? cached : loadFromFile(params);
     }
 
     protected <D> void save(Path filePath, Codec<D> codec, D data) throws IOException {

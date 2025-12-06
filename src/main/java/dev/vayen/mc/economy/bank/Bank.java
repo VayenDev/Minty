@@ -61,6 +61,6 @@ public class Bank {
     }
 
     public Optional<BankLoan> getLoanByCustomer(UUID customerUUID) {
-        return loans.stream().filter(c -> c.getCustomerUUID().equals(uuid)).distinct().findFirst();
+        return loans.stream().filter(c -> c.getCustomerUUID().equals(customerUUID)).distinct().findFirst();
     }
 }

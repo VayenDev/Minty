@@ -18,43 +18,69 @@
 package dev.vayen.mc.economy;
 
 import dev.vayen.mc.Minty;
+import dev.vayen.mc.economy.exception.BankNotFoundException;
+import dev.vayen.mc.economy.exception.CustomerNotFoundException;
 import dev.vayen.mc.economy.exception.InsufficientFundsException;
 import dev.vayen.mc.economy.exception.InvalidPaymentAmountException;
+import dev.vayen.mc.manager.BankManager;
 
+import java.io.IOException;
 import java.util.NoSuchElementException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Economy {
-    public void pay(String senderIban, String receiverIban, long amount) throws InvalidPaymentAmountException, NoSuchElementException, InsufficientFundsException {
-        var bm = Minty.INSTANCE.getBankManager();
-        var sender = bm.getCustomerByIban(senderIban).orElseThrow();
-        var receiver = bm.getCustomerByIban(receiverIban).orElseThrow();
-        var maxDebt = bm.getCached(sender.getBankUUID()).orElseThrow().getMaxDebt();
+    private static final Lock lock = new ReentrantLock();
+
+    public static void pay(String senderIban, String receiverIban, long amount) throws InvalidPaymentAmountException, NoSuchElementException, InsufficientFundsException, IOException, CustomerNotFoundException, BankNotFoundException {
+        var bm = Minty.getInstance().getBankManager();
+        var sender = bm.getCustomerByIban(senderIban).orElseThrow(() -> new CustomerNotFoundException(false));
+        var receiver = bm.getCustomerByIban(receiverIban).orElseThrow(() -> new CustomerNotFoundException(true));
+        var bank = bm.get(new BankManager.Params(sender.getBankUUID())).orElseThrow(() -> new BankNotFoundException(false));
+        var receiverBank = bm.get(new BankManager.Params(receiver.getBankUUID())).orElseThrow(() -> new BankNotFoundException(true));
+        var maxDebt = bank.getMaxDebt();
 
         if (amount <= 0) throw new InvalidPaymentAmountException();
-        if (sender.getBalance() - amount < (-maxDebt))
-            throw new InsufficientFundsException(maxDebt);
-        var newReceiverBalance = receiver.getBalance() + amount;
 
-        sender.setBalance(sender.getBalance() - amount);
-        receiver.setBalance(newReceiverBalance);
+        synchronized (sender) {
+            synchronized (receiver) {
+                if (sender.getBalance() - amount < (-maxDebt))
+                    throw new InsufficientFundsException(maxDebt);
+                var newReceiverBalance = receiver.getBalance() + amount;
+
+                sender.setBalance(sender.getBalance() - amount);
+                receiver.setBalance(newReceiverBalance);
+
+                bm.saveCustomer(bank, sender.getPlayerUUID(), sender);
+                bm.saveCustomer(receiverBank, receiver.getPlayerUUID(), receiver);
+            }
+        }
     }
 
-    public void deposit(String iban, long amount) throws NoSuchElementException {
-        var bm = Minty.INSTANCE.getBankManager();
-        var customer = bm.getCustomerByIban(iban).orElseThrow();
+    public static void deposit(String iban, long amount) throws NoSuchElementException, IOException, CustomerNotFoundException, BankNotFoundException {
+        var bm = Minty.getInstance().getBankManager();
+        var customer = bm.getCustomerByIban(iban).orElseThrow(() -> new CustomerNotFoundException(false));
+        var bank = bm.getCached(customer.getBankUUID()).orElseThrow(() -> new BankNotFoundException(false));
         var newBalance = customer.getBalance() + amount;
 
-        customer.setBalance(customer.getBalance() + amount);
+        synchronized (customer) {
+            customer.setBalance(customer.getBalance() + amount);
+            bm.saveCustomer(bank, customer.getPlayerUUID(), customer);
+        }
     }
 
-    public void withdraw(String iban, long amount) throws NoSuchElementException, InsufficientFundsException {
-        var bm = Minty.INSTANCE.getBankManager();
-        var customer = bm.getCustomerByIban(iban).orElseThrow();
-        var maxDebt = bm.getCached(customer.getBankUUID()).orElseThrow().getMaxDebt();
+    public static void withdraw(String iban, long amount) throws NoSuchElementException, InsufficientFundsException, IOException, CustomerNotFoundException, BankNotFoundException {
+        var bm = Minty.getInstance().getBankManager();
+        var customer = bm.getCustomerByIban(iban).orElseThrow(() -> new CustomerNotFoundException(false));
+        var bank = bm.get(new BankManager.Params(customer.getBankUUID())).orElseThrow(() -> new BankNotFoundException(false));
+        var maxDebt = bank.getMaxDebt();
 
-        if (customer.getBalance() - amount < (-maxDebt))
-            throw new InsufficientFundsException(maxDebt);
+        synchronized (customer) {
+            if (customer.getBalance() - amount < (-maxDebt))
+                throw new InsufficientFundsException(maxDebt);
 
-        customer.setBalance(customer.getBalance() - amount);
+            customer.setBalance(customer.getBalance() - amount);
+            bm.saveCustomer(bank, customer.getPlayerUUID(), customer);
+        }
     }
 }

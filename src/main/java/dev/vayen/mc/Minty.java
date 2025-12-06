@@ -18,14 +18,11 @@
 package dev.vayen.mc;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
-import de.exlll.configlib.YamlConfigurations;
-import dev.vayen.mc.character.CharacterConfig;
-import dev.vayen.mc.codec.BsonCodecItemStack;
-import dev.vayen.mc.codec.BsonCodecLocation;
+import dev.vayen.mc.economy.bank.Bank;
 import dev.vayen.mc.manager.BankManager;
-import dev.vayen.mc.manager.CharacterManager;
 import dev.vayen.mc.menu.MenuListener;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import org.bson.codecs.configuration.CodecRegistries;
 import org.bson.codecs.configuration.CodecRegistry;
 import org.bson.codecs.pojo.PojoCodecProvider;
@@ -34,38 +31,30 @@ import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public final class Minty extends JavaPlugin {
-    public static final Minty INSTANCE = getPlugin(Minty.class);
     public static final String GRAY_ARROW = "<dark_gray>»<reset>";
-    public static final CodecRegistry POJO_CODEC_REGISTRY = CodecRegistries.fromRegistries(CodecRegistries.fromProviders(PojoCodecProvider.builder().automatic(true).build()), CodecRegistries.fromCodecs(new BsonCodecLocation(), new BsonCodecItemStack()));
+    public static final CodecRegistry POJO_CODEC_REGISTRY = CodecRegistries.fromRegistries(CodecRegistries.fromProviders(PojoCodecProvider.builder().automatic(true).build()));
+    @Getter
+    private static Minty instance;
     public final Logger LOGGER = getLogger();
     public final PluginManager PLUGIN_MANAGER = getServer().getPluginManager();
-    @Getter
-    private CharacterConfig characterConfig = CharacterConfig.DEFAULT;
 
-    @Getter
-    private CharacterManager characterManager;
     @Getter
     private BankManager bankManager;
 
     @Override
     public void onLoad() {
-        if (getDataFolder().exists()) getDataFolder().mkdirs();
+        instance = this;
 
-        characterManager = new CharacterManager(Caffeine.newBuilder().maximumSize(getServer().getMaxPlayers()).build());
+        if (!getDataFolder().exists()) getDataFolder().mkdirs();
+
         bankManager = new BankManager(
                 Caffeine.newBuilder().maximumSize(10).build(), // 10 Banks loaded on the server with all customers and loans.
                 Caffeine.newBuilder().maximumSize(getServer().getMaxPlayers() * 10L).build()
         );
-
-        if (!Files.exists(getDataPath().resolve(CharacterConfig.PATH)))
-            YamlConfigurations.save(getDataPath().resolve(CharacterConfig.PATH), CharacterConfig.class, characterConfig);
-        else
-            characterConfig = YamlConfigurations.load(getDataPath().resolve(CharacterConfig.PATH), CharacterConfig.class);
 
         LOGGER.info("Minty is loading!");
     }
@@ -86,8 +75,13 @@ public final class Minty extends JavaPlugin {
         }, 0, 5, TimeUnit.MINUTES);
     }
 
+    @SneakyThrows
     @Override
     public void onDisable() {
+        for (Bank bank : bankManager.getCache().asMap().values()) {
+            bankManager.unload(new BankManager.Params(bank.getUuid()));
+        }
+
         LOGGER.info("Minty is disabled!");
     }
 }
